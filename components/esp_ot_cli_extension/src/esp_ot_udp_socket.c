@@ -10,6 +10,7 @@
 #include "esp_err.h"
 #include "esp_log.h"
 #include "esp_netif.h"
+#include "esp_netif_net_stack.h"
 #include "esp_openthread_lock.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -156,6 +157,20 @@ otError esp_ot_process_udp_client(void *aContext, uint8_t aArgsLength, char *aAr
         return OT_ERROR_NONE;
     }
 }
+esp_err_t join_ip6_mcast(void *ctx)
+{
+    ip6_addr_t *group = ctx;
+    struct netif *netif = esp_netif_get_netif_impl(esp_netif_get_handle_from_ifkey("OT_DEF"));
+    return mld6_joingroup_netif(netif, group) == ERR_OK ? ESP_OK : ESP_FAIL;
+}
+
+esp_err_t leave_ip6_mcast(void *ctx)
+{
+    ip6_addr_t *group = ctx;
+    struct netif *netif = esp_netif_get_netif_impl(esp_netif_get_handle_from_ifkey("OT_DEF"));
+    return mld6_leavegroup_netif(netif, group) == ERR_OK ? ESP_OK : ESP_FAIL;
+}
+
 
 otError esp_ot_process_mcast_group(void *aContext, uint8_t aArgsLength, char *aArgs[])
 {
@@ -163,20 +178,22 @@ otError esp_ot_process_mcast_group(void *aContext, uint8_t aArgsLength, char *aA
         ESP_LOGE(TAG, "Invalid arguments: mcast [join|leave] group_address");
         return OT_ERROR_INVALID_ARGS;
     }
+    otError ret = OT_ERROR_NONE;
+    esp_openthread_task_switching_lock_release();
 
     ip6_addr_t group;
     inet6_aton(aArgs[1], &group);
-    struct netif *netif = netif_get_by_index(esp_netif_get_netif_impl_index(esp_netif_get_handle_from_ifkey("OT_DEF")));
     if (strncmp(aArgs[0], "join", 4) == 0) {
-        if (mld6_joingroup_netif(netif, &group) != ERR_OK) {
+        if (esp_netif_tcpip_exec(join_ip6_mcast, &group) != ESP_OK) {
             ESP_LOGE(TAG, "Failed to join group");
-            return OT_ERROR_FAILED;
+            ret = OT_ERROR_FAILED;
         }
     } else {
-        if (mld6_leavegroup_netif(netif, &group) != ERR_OK) {
+        if (esp_netif_tcpip_exec(leave_ip6_mcast, &group) != ESP_OK) {
             ESP_LOGE(TAG, "Failed to leave group");
-            return OT_ERROR_FAILED;
+            ret = OT_ERROR_FAILED;
         }
     }
-    return OT_ERROR_NONE;
+    esp_openthread_task_switching_lock_acquire(portMAX_DELAY);
+    return ret;
 }
