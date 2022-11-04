@@ -164,16 +164,16 @@ otError esp_ot_process_mcast_group(void *aContext, uint8_t aArgsLength, char *aA
         return OT_ERROR_INVALID_ARGS;
     }
 
-    ip6_addr_t group;
+    esp_ip6_addr_t group;
     inet6_aton(aArgs[1], &group);
-    struct netif *netif = netif_get_by_index(esp_netif_get_netif_impl_index(esp_netif_get_handle_from_ifkey("OT_DEF")));
+    esp_netif_t *netif = esp_netif_get_handle_from_ifkey("OT_DEF");
     if (strncmp(aArgs[0], "join", 4) == 0) {
-        if (mld6_joingroup_netif(netif, &group) != ERR_OK) {
+        if (esp_netif_join_ip6_multicast_group(netif, &group) != ERR_OK) {
             ESP_LOGE(TAG, "Failed to join group");
             return OT_ERROR_FAILED;
         }
     } else {
-        if (mld6_leavegroup_netif(netif, &group) != ERR_OK) {
+        if (esp_netif_leave_ip6_multicast_group(netif, &group) != ERR_OK) {
             ESP_LOGE(TAG, "Failed to leave group");
             return OT_ERROR_FAILED;
         }
